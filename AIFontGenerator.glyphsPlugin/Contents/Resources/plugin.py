@@ -21,7 +21,7 @@ import zipfile
 import shutil
 from io import BytesIO
 
-PLUGIN_VERSION = "0.600"
+PLUGIN_VERSION = "0.610"
 VERSION_CHECK_URL = "https://aringtypeface.com/fontgen/plugin_version.json"
 
 from GlyphsApp import Glyphs, GSGlyph, GSPath, GSNode, GSComponent, GSAnchor, GSLINE, GSCURVE, GSOFFCURVE, Message, FILTER_MENU
@@ -699,6 +699,36 @@ class AIFontGenerator(GeneralPlugin):
             def progress_callback(status):
                 progress.update()
 
+            # Gather GlyphsApp user info for server logging
+            glyphs_user = {}
+            try:
+                import os as _os
+                glyphs_user['mac_user'] = _os.environ.get('USER', '')
+                try:
+                    import subprocess as _sp
+                    _result = _sp.run(['id', '-F'], capture_output=True, text=True, timeout=2)
+                    if _result.returncode == 0:
+                        glyphs_user['mac_fullname'] = _result.stdout.strip()
+                except:
+                    pass
+                # Glyphs license hash (consistent per license activation)
+                try:
+                    from Foundation import NSUserDefaults
+                    import hashlib
+                    defaults = NSUserDefaults.standardUserDefaults()
+                    # Paddle license hash for Glyphs 3
+                    paddle_sd = defaults.objectForKey_('Paddle-Glyphs 3-650121-SD')
+                    if paddle_sd:
+                        glyphs_user['license_hash'] = str(paddle_sd)
+                    # Hash of encrypted license blob (backup identifier)
+                    user3 = defaults.objectForKey_('User3')
+                    if user3:
+                        glyphs_user['user_hash'] = hashlib.sha256(bytes(user3)).hexdigest()
+                except:
+                    pass
+            except:
+                pass
+
             # Gather font metrics to pass to server for proper scaling
             master = font.masters[0] if font.masters else None
             font_metrics = {
@@ -714,7 +744,8 @@ class AIFontGenerator(GeneralPlugin):
 
             template_image_b64, log_dir = client.generate_template(
                 style_image_b64,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                glyphs_user=glyphs_user
             )
 
             if not template_image_b64:
