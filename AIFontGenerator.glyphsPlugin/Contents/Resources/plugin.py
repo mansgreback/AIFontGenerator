@@ -537,10 +537,18 @@ class AIFontGenerator(GeneralPlugin):
             )
             install_path = os.path.join(install_dir, "AIFontGenerator.glyphsPlugin")
 
-            if os.path.exists(install_path):
+            if os.path.islink(install_path):
+                # Plugin Manager installs as symlink to Repositories/
+                link_target = os.path.realpath(install_path)
+                os.remove(install_path)
+                if os.path.exists(link_target):
+                    shutil.rmtree(link_target)
+                shutil.copytree(plugin_bundle, install_path)
+            elif os.path.exists(install_path):
                 shutil.rmtree(install_path)
-
-            shutil.copytree(plugin_bundle, install_path)
+                shutil.copytree(plugin_bundle, install_path)
+            else:
+                shutil.copytree(plugin_bundle, install_path)
 
             # Step 5: Clean up temp files
             try:
