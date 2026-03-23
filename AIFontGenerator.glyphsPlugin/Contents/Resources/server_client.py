@@ -33,7 +33,7 @@ class ServerClient:
         url = f"{self.base_url}{path}"
         headers = {
             "Content-Type": "application/json",
-            "User-Agent": "AIFontGenerator/0.610",
+            "User-Agent": "AIFontGenerator/0.620",
         }
         data = None
         if body:

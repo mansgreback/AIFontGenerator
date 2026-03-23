@@ -21,7 +21,7 @@ import zipfile
 import shutil
 from io import BytesIO
 
-PLUGIN_VERSION = "0.610"
+PLUGIN_VERSION = "0.620"
 VERSION_CHECK_URL = "https://aringtypeface.com/fontgen/plugin_version.json"
 
 from GlyphsApp import Glyphs, GSGlyph, GSPath, GSNode, GSComponent, GSAnchor, GSLINE, GSCURVE, GSOFFCURVE, Message, FILTER_MENU
@@ -107,14 +107,17 @@ class ProgressWindowController:
         """Process events to keep UI responsive."""
         if self._window:
             try:
-                from AppKit import NSApplication, NSEventMaskAny
+                from AppKit import NSApplication, NSEventMaskAny, NSDate
                 app = NSApplication.sharedApplication()
+                past = NSDate.distantPast()
                 for _ in range(3):
                     event = app.nextEventMatchingMask_untilDate_inMode_dequeue_(
-                        NSEventMaskAny, None, "NSDefaultRunLoopMode", True
+                        NSEventMaskAny, past, "NSDefaultRunLoopMode", True
                     )
                     if event:
                         app.sendEvent_(event)
+                    else:
+                        break
             except:
                 pass
 
@@ -146,28 +149,18 @@ def show_glyph_selection_dialog():
 
     alert = NSAlert.alloc().init()
     alert.setMessageText_("AI Font Generator")
-    alert.setInformativeText_("")
+    alert.setInformativeText_(f"v{PLUGIN_VERSION}")
+    alert.setIcon_(NSImage.alloc().initWithSize_(NSMakeSize(1, 1)))
     alert.addButtonWithTitle_("Generate")
     alert.addButtonWithTitle_("Cancel")
 
-    container = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 350, 420))
     full_w = 350
-
-    # --- Version label (gray, under title) ---
-    versionLabel = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 406, full_w, 16))
-    versionLabel.setStringValue_(f"v{PLUGIN_VERSION}")
-    versionLabel.setBezeled_(False)
-    versionLabel.setDrawsBackground_(False)
-    versionLabel.setEditable_(False)
-    versionLabel.setSelectable_(True)
-    versionLabel.setFont_(NSFont.systemFontOfSize_(11))
-    versionLabel.setTextColor_(NSColor.grayColor())
-    versionLabel.setAlignment_(NSCenterTextAlignment)
-    container.addSubview_(versionLabel)
+    h = 275
+    container = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, full_w, h))
 
     # --- Style reference section ---
-    y = 365
-    label1 = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, full_w, 18))
+    y = h - 18
+    label1 = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, full_w, 16))
     label1.setStringValue_("Style reference:")
     label1.setBezeled_(False)
     label1.setDrawsBackground_(False)
@@ -180,22 +173,23 @@ def show_glyph_selection_dialog():
     cell1.setButtonType_(4)  # NSRadioButton
     cell1.setFont_(NSFont.systemFontOfSize_(13))
 
+    y -= 46
     glyphMatrix = NSMatrix.alloc().initWithFrame_mode_prototype_numberOfRows_numberOfColumns_(
-        NSMakeRect(10, y - 52, full_w, 50),
+        NSMakeRect(10, y, full_w, 44),
         NSRadioModeMatrix,
         cell1,
         2, 1
     )
-    glyphMatrix.setCellSize_((full_w, 22))
-    glyphMatrix.setIntercellSpacing_((0, 4))
+    glyphMatrix.setCellSize_((full_w, 20))
+    glyphMatrix.setIntercellSpacing_((0, 2))
     glyphMatrix.cells()[0].setTitle_("Selected glyphs only")
     glyphMatrix.cells()[1].setTitle_("All glyphs with paths")
     glyphMatrix.selectCellAtRow_column_(0, 0)
     container.addSubview_(glyphMatrix)
 
     # --- Create as section ---
-    y = 290
-    label2 = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, full_w, 18))
+    y -= 26
+    label2 = NSTextField.alloc().initWithFrame_(NSMakeRect(0, y, full_w, 16))
     label2.setStringValue_("Create as:")
     label2.setBezeled_(False)
     label2.setDrawsBackground_(False)
@@ -208,37 +202,39 @@ def show_glyph_selection_dialog():
     cellCreate.setButtonType_(4)  # NSRadioButton
     cellCreate.setFont_(NSFont.systemFontOfSize_(13))
 
+    y -= 66
     createMatrix = NSMatrix.alloc().initWithFrame_mode_prototype_numberOfRows_numberOfColumns_(
-        NSMakeRect(10, y - 78, full_w, 75),
+        NSMakeRect(10, y, full_w, 64),
         NSRadioModeMatrix,
         cellCreate,
         3, 1
     )
-    createMatrix.setCellSize_((full_w, 22))
-    createMatrix.setIntercellSpacing_((0, 4))
+    createMatrix.setCellSize_((full_w, 20))
+    createMatrix.setIntercellSpacing_((0, 2))
     createMatrix.cells()[0].setTitle_("New master")
     createMatrix.cells()[1].setTitle_("Background in current master")
     createMatrix.cells()[2].setTitle_("Overwrite current master")
     createMatrix.selectCellAtRow_column_(0, 0)
     container.addSubview_(createMatrix)
 
-    # --- Overwrite sub-options (only active when "Overwrite current master" is selected) ---
+    # --- Overwrite sub-options ---
     cellOverwrite = NSButtonCell.alloc().init()
     cellOverwrite.setButtonType_(4)  # NSRadioButton
     cellOverwrite.setFont_(NSFont.systemFontOfSize_(12))
 
+    y -= 46
     overwriteMatrix = NSMatrix.alloc().initWithFrame_mode_prototype_numberOfRows_numberOfColumns_(
-        NSMakeRect(30, y - 128, full_w - 20, 48),
+        NSMakeRect(30, y, full_w - 30, 44),
         NSRadioModeMatrix,
         cellOverwrite,
         2, 1
     )
-    overwriteMatrix.setCellSize_((full_w - 20, 22))
-    overwriteMatrix.setIntercellSpacing_((0, 4))
+    overwriteMatrix.setCellSize_((full_w - 30, 20))
+    overwriteMatrix.setIntercellSpacing_((0, 2))
     overwriteMatrix.cells()[0].setTitle_("Keep referenced glyphs")
     overwriteMatrix.cells()[1].setTitle_("Replace all")
     overwriteMatrix.selectCellAtRow_column_(0, 0)
-    overwriteMatrix.setEnabled_(False)  # Disabled by default (New master selected)
+    overwriteMatrix.setEnabled_(False)
     container.addSubview_(overwriteMatrix)
 
     # Callback to enable/disable overwrite sub-options
@@ -252,31 +248,75 @@ def show_glyph_selection_dialog():
     poll_timer = NSTimer.timerWithTimeInterval_repeats_block_(0.15, True, _poll_create_mode)
     NSRunLoop.currentRunLoop().addTimer_forMode_(poll_timer, NSRunLoopCommonModes)
 
-    # ========== WARNING TEXT (full width, bottom) ==========
-    warningLabel = NSTextField.alloc().initWithFrame_(NSMakeRect(0, 0, 350, 105))
-    warningLabel.setStringValue_("Use with caution: Remember to save a copy of your work before running this. All information will be sent to, processed, and stored on the server. Internet access is required. Do not submit any trademark/copyright protected or confidential works. The process will take a few minutes, during which you will not be able to use Glyphs.")
+    # ========== "Use with caution" toggle (bottom) ==========
+    warn_h = 90
+    cautionBtn = NSButton.alloc().initWithFrame_(NSMakeRect(0, 0, full_w, 18))
+    cautionBtn.setButtonType_(1)
+    cautionBtn.setBezelStyle_(0)
+    cautionBtn.setBordered_(False)
+    cautionBtn.setTitle_("\u25B6 Use with caution")
+    cautionBtn.setFont_(NSFont.systemFontOfSize_(10))
+    cautionBtn.setContentTintColor_(NSColor.secondaryLabelColor())
+    container.addSubview_(cautionBtn)
+
+    warningLabel = NSTextField.alloc().initWithFrame_(NSMakeRect(10, 0, full_w - 10, warn_h))
+    warningLabel.setStringValue_("Save a copy of your work before running this. A bitmap image of the selected characters will be sent to, processed, and stored on aringtypeface.com server, together with Glyphs' install hash and Mac user name. Internet access is required. Do not submit any trademark/copyright protected or confidential works.")
     warningLabel.setBezeled_(False)
     warningLabel.setDrawsBackground_(False)
     warningLabel.setEditable_(False)
     warningLabel.setSelectable_(False)
     warningLabel.setFont_(NSFont.systemFontOfSize_(10))
     warningLabel.setTextColor_(NSColor.secondaryLabelColor())
-    warningLabel.setPreferredMaxLayoutWidth_(350)
+    warningLabel.setPreferredMaxLayoutWidth_(full_w - 10)
     try:
-        warningLabel.setLineBreakMode_(0)  # NSLineBreakByWordWrapping
+        warningLabel.setLineBreakMode_(0)
     except:
         pass
-    container.addSubview_(warningLabel)
+    warningLabel.setHidden_(True)
+
+    # Collect content views to shift when expanding (everything except caution/warning)
+    _content_views = [v for v in container.subviews() if v not in (cautionBtn,)]
+    _caution_was_on = [False]
+
+    def _poll_caution(timer):
+        is_on = cautionBtn.state() == 1
+        if is_on == _caution_was_on[0]:
+            return
+        _caution_was_on[0] = is_on
+        if is_on:
+            cautionBtn.setTitle_("\u25BC Use with caution")
+            # Grow container and shift content up
+            container.setFrameSize_((full_w, h + warn_h))
+            for v in _content_views:
+                f = v.frame()
+                v.setFrameOrigin_((f.origin.x, f.origin.y + warn_h))
+            cautionBtn.setFrameOrigin_((0, warn_h))
+            warningLabel.setFrameOrigin_((10, 0))
+            warningLabel.setHidden_(False)
+            container.addSubview_(warningLabel)
+        else:
+            cautionBtn.setTitle_("\u25B6 Use with caution")
+            warningLabel.setHidden_(True)
+            # Shrink container and shift content back down
+            for v in _content_views:
+                f = v.frame()
+                v.setFrameOrigin_((f.origin.x, f.origin.y - warn_h))
+            cautionBtn.setFrameOrigin_((0, 0))
+            container.setFrameSize_((full_w, h))
+        alert.layout()
+
+    caution_timer = NSTimer.timerWithTimeInterval_repeats_block_(0.1, True, _poll_caution)
+    NSRunLoop.currentRunLoop().addTimer_forMode_(caution_timer, NSRunLoopCommonModes)
 
     alert.setAccessoryView_(container)
 
     result = alert.runModal()
     poll_timer.invalidate()
+    caution_timer.invalidate()
 
     if result == NSAlertFirstButtonReturn:
         glyph_choice = 'selected' if glyphMatrix.selectedRow() == 0 else 'all'
-
-        create_mode = createMatrix.selectedRow()  # 0=new master, 1=background, 2=overwrite
+        create_mode = createMatrix.selectedRow()
         if create_mode == 0:
             layer_choice = 'new_master'
             existing_choice = 'replace_all'
@@ -287,7 +327,6 @@ def show_glyph_selection_dialog():
             layer_choice = 'foreground'
             overwrite_row = overwriteMatrix.selectedRow()
             existing_choice = 'replace' if overwrite_row == 0 else 'replace_all'
-
         return {
             'glyphs': glyph_choice,
             'layer': layer_choice,
@@ -296,8 +335,7 @@ def show_glyph_selection_dialog():
             'vertical_metrics': True,
             'create_mode': create_mode,
         }
-    else:
-        return None
+    return None
 
 
 def _parse_version(version_str):
@@ -633,14 +671,16 @@ class AIFontGenerator(GeneralPlugin):
             # Use only selected glyphs
             selected_layers = font.selectedLayers
             if not selected_layers:
+                progress.close()
                 Message(
                     title="No Selection",
                     message="Please select at least one glyph to use as style reference.",
                     OKButton="OK"
                 )
                 return
-            layers_with_paths = [l for l in selected_layers if l.paths]
+            layers_with_paths = [l for l in selected_layers if l.paths or l.components]
             if not layers_with_paths:
+                progress.close()
                 Message(
                     title="Empty Selection",
                     message="Selected glyphs have no paths. Please select glyphs with visible outlines.",
@@ -648,9 +688,10 @@ class AIFontGenerator(GeneralPlugin):
                 )
                 return
         else:
-            # Use all glyphs with paths
+            # Use all glyphs with paths or components
             master_id = font.masters[0].id if font.masters else None
             if not master_id:
+                progress.close()
                 Message(
                     title="No Master",
                     message="Font has no masters.",
@@ -660,9 +701,10 @@ class AIFontGenerator(GeneralPlugin):
             layers_with_paths = []
             for glyph in font.glyphs:
                 layer = glyph.layers[master_id]
-                if layer and layer.paths:
+                if layer and (layer.paths or layer.components):
                     layers_with_paths.append(layer)
             if not layers_with_paths:
+                progress.close()
                 Message(
                     title="No Glyphs",
                     message="No glyphs with paths found in the font.",
@@ -747,57 +789,98 @@ class AIFontGenerator(GeneralPlugin):
                 'x_height': int(master.xHeight) if master and master.xHeight else None,
             }
 
-            # Step 2a: Generate template
-            progress.update()
+            # Step 2a+3: Network I/O on background thread to keep Glyphs responsive
+            import threading
+            from AppKit import NSTimer, NSRunLoop, NSRunLoopCommonModes
 
-            template_image_b64, log_dir = client.generate_template(
-                style_image_b64,
-                progress_callback=progress_callback,
-                glyphs_user=glyphs_user
-            )
+            self._net_done = False
+            self._net_error = None
+            self._network_result = None
 
-            if not template_image_b64:
-                progress.close()
-                Message(
-                    title="Generation Failed",
-                    message="Server did not return a template image.",
-                    OKButton="OK"
-                )
-                return
+            def _network_work():
+                try:
+                    tmpl_b64, l_dir = client.generate_template(
+                        style_image_b64,
+                        progress_callback=None,
+                        glyphs_user=glyphs_user
+                    )
+                    if not tmpl_b64:
+                        self._net_error = "Server did not return a template image."
+                        return
 
-            # Step 3: Extract glyphs
-            progress.update()
+                    g_data, bg_data = client.extract_glyphs(
+                        tmpl_b64,
+                        font_metrics=font_metrics,
+                        log_dir=l_dir,
+                        progress_callback=None
+                    )
+                    if not g_data or len(g_data) == 0:
+                        self._net_error = "Could not extract any glyphs from the generated template."
+                        return
 
-            glyph_data, bg_glyph_data = client.extract_glyphs(
-                template_image_b64,
-                font_metrics=font_metrics,
-                log_dir=log_dir,
-                progress_callback=progress_callback
-            )
+                    self._network_result = {
+                        'glyph_data': g_data,
+                        'bg_glyph_data': bg_data,
+                        'font': font,
+                        'layer_choice': layer_choice,
+                        'existing_choice': existing_choice,
+                        'reference_glyph_names': reference_glyph_names,
+                        'create_mode': create_mode,
+                    }
+                    self._net_done = True
+                except Exception as e:
+                    self._net_error = str(e)
 
-            # Accept partial results - even 1 glyph is better than none
-            if not glyph_data or len(glyph_data) == 0:
-                progress.close()
-                Message(
-                    title="Extraction Failed",
-                    message="Could not extract any glyphs from the generated template. Check Macro Panel for details.",
-                    OKButton="OK"
-                )
-                return
+            def _poll_network(timer):
+                if self._net_error:
+                    timer.invalidate()
+                    progress.close()
+                    Message(title="Generation Failed", message=self._net_error, OKButton="OK")
+                elif self._net_done:
+                    timer.invalidate()
+                    self._onNetworkDone_(None)
 
-            # Step 4: Insert glyphs into font
+            t = threading.Thread(target=_network_work)
+            t.daemon = True
+            t.start()
+
+            poll = NSTimer.timerWithTimeInterval_repeats_block_(0.5, True, _poll_network)
+            NSRunLoop.currentRunLoop().addTimer_forMode_(poll, NSRunLoopCommonModes)
+            return
+
+        except Exception as e:
+            progress.close()
+            raise
+
+    def _onNetworkError_(self, error_msg):
+        """Called on main thread when network work fails."""
+        if hasattr(self, '_progress') and self._progress:
+            self._progress.close()
+        Message(title="Generation Failed", message=str(error_msg), OKButton="OK")
+
+    def _onNetworkDone_(self, sender):
+        """Called on main thread when network work completes — inserts glyphs into font."""
+        try:
+            r = self._network_result
+            font = r['font']
+            glyph_data = r['glyph_data']
+            bg_glyph_data = r['bg_glyph_data']
+            layer_choice = r['layer_choice']
+            existing_choice = r['existing_choice']
+            reference_glyph_names = r['reference_glyph_names']
+            create_mode = r['create_mode']
+            progress = self._progress
+
             progress.update()
 
             # Handle "New master" mode: create a new master before inserting
             target_master_id = None
             if create_mode == 0:
-                # Create a new master as a copy of the first master
                 source_master = font.masters[0]
                 new_master = source_master.copy()
                 new_master.name = f"AI Generated ({time.strftime('%Y-%m-%d %H:%M')})"
                 font.masters.append(new_master)
                 target_master_id = new_master.id
-                # Set layer_choice to 'foreground' — we write into the new master's foreground
                 layer_choice = 'foreground'
 
             replaced_count = self._replace_glyphs(font, glyph_data, layer_choice, existing_choice, reference_glyph_names, target_master_id=target_master_id)
@@ -806,18 +889,13 @@ class AIFontGenerator(GeneralPlugin):
                 self._replace_glyphs(font, bg_glyph_data, 'background', 'replace_all', set(), target_master_id=target_master_id)
 
             progress.update()
-
-            # Complete progress and close
             progress.complete()
             progress.close()
 
-            # Report generated glyph names
             generated_names = sorted(glyph_data.keys())
             print(f"[AIFontGenerator] Generated {replaced_count} glyphs: {', '.join(generated_names)}")
 
-            # Switch to the new master and show Font view with all glyphs
             if create_mode == 0 and target_master_id:
-                # Set icon parameter AFTER glyphs are inserted so "n" has paths
                 try:
                     for m in font.masters:
                         if m.id == target_master_id:
@@ -825,12 +903,10 @@ class AIFontGenerator(GeneralPlugin):
                             break
                 except:
                     pass
-                # Switch to font overview first, then select the new master
                 try:
                     font.parent.windowController().showTabAtIndex_(0)
                 except:
                     pass
-                # Now set the master index (after view switch so it sticks)
                 try:
                     for i, m in enumerate(font.masters):
                         if m.id == target_master_id:
@@ -838,7 +914,6 @@ class AIFontGenerator(GeneralPlugin):
                             break
                 except:
                     pass
-                # Force UI refresh
                 try:
                     wc = font.parent.windowController()
                     wc.updateFont()
@@ -849,7 +924,6 @@ class AIFontGenerator(GeneralPlugin):
                 except:
                     pass
 
-            # Done!
             output_msg = f"Generated {replaced_count} glyphs."
             if create_mode == 0:
                 output_msg += f"\nCreated new master: {new_master.name}"
@@ -860,11 +934,11 @@ class AIFontGenerator(GeneralPlugin):
                 OKButton="OK"
             )
 
-            return
-
         except Exception as e:
-            progress.close()
-            raise
+            if hasattr(self, '_progress') and self._progress:
+                self._progress.close()
+            traceback.print_exc()
+            Message(title="AI Font Generator Error", message=str(e), OKButton="OK")
 
     @objc.python_method
     def _distribute_glyphs_to_rows(self, layers, available_width, scale, glyph_spacing=0):
@@ -1213,7 +1287,7 @@ class AIFontGenerator(GeneralPlugin):
                     positions = get_glyph_positions(row_layers)
 
                     for idx, layer in enumerate(row_layers):
-                        if layer.bezierPath:
+                        if layer.completeBezierPath:
                             NSGraphicsContext.currentContext().saveGraphicsState()
 
                             transform = NSAffineTransform.transform()
@@ -1222,8 +1296,8 @@ class AIFontGenerator(GeneralPlugin):
                             transform.concat()
 
                             NSColor.whiteColor().set()
-                            layer.bezierPath.fill()
-                            path = layer.bezierPath.copy()
+                            layer.completeBezierPath.fill()
+                            path = layer.completeBezierPath.copy()
                             path.setLineWidth_(outline_thickness)
                             path.stroke()
 
@@ -1238,7 +1312,7 @@ class AIFontGenerator(GeneralPlugin):
                     positions = get_glyph_positions(row_layers)
 
                     for idx, layer in enumerate(row_layers):
-                        if layer.bezierPath:
+                        if layer.completeBezierPath:
                             rx, ry, rw, rh = all_gray_rects[rect_idx]
 
                             NSGraphicsContext.currentContext().saveGraphicsState()
@@ -1250,8 +1324,8 @@ class AIFontGenerator(GeneralPlugin):
                             transform.concat()
 
                             gray_color.set()
-                            layer.bezierPath.fill()
-                            path = layer.bezierPath.copy()
+                            layer.completeBezierPath.fill()
+                            path = layer.completeBezierPath.copy()
                             path.setLineWidth_(outline_thickness)
                             path.stroke()
 
@@ -1265,7 +1339,7 @@ class AIFontGenerator(GeneralPlugin):
                 positions = get_glyph_positions(row_layers)
 
                 for idx, layer in enumerate(row_layers):
-                    if layer.bezierPath:
+                    if layer.completeBezierPath:
                         NSGraphicsContext.currentContext().saveGraphicsState()
                         transform = NSAffineTransform.transform()
                         transform.translateXBy_yBy_(positions[idx], baseline_y)
@@ -1273,7 +1347,7 @@ class AIFontGenerator(GeneralPlugin):
                         transform.concat()
 
                         NSColor.blackColor().set()
-                        layer.bezierPath.fill()
+                        layer.completeBezierPath.fill()
 
                         NSGraphicsContext.currentContext().restoreGraphicsState()
 
@@ -1561,47 +1635,50 @@ class AIFontGenerator(GeneralPlugin):
         if not path_nodes:
             return None
 
-        path = GSPath()
-
+        # Step 1: Parse all nodes into tuples first
+        parsed = []
         for node_str in path_nodes:
             try:
-                # Parse node string: "x y TYPE [SMOOTH]"
                 clean = node_str.strip('"')
-                # More flexible regex - handle "CURVE SMOOTH" as one token
                 match = re.match(r'(-?\d+)\s+(-?\d+)\s+(.+)', clean)
-
                 if not match:
                     continue
-
                 x = int(match.group(1))
                 y = int(match.group(2))
                 type_part = match.group(3).upper().strip()
-
-                # Check for SMOOTH suffix
                 is_smooth = "SMOOTH" in type_part
-
-                # Determine node type
                 if "OFFCURVE" in type_part:
                     node_type = GSOFFCURVE
                 elif "CURVE" in type_part:
                     node_type = GSCURVE
                 else:
                     node_type = GSLINE
-
-                # Create node using constructor with position
-                node = GSNode((x, y), node_type)
-
-                if is_smooth and node_type != GSOFFCURVE:
-                    node.smooth = True
-
-                path.nodes.append(node)
-
-            except Exception as e:
-                # Skip problematic nodes but continue
+                parsed.append((x, y, node_type, is_smooth))
+            except:
                 continue
 
-        if len(path.nodes) < 2:
+        if len(parsed) < 2:
             return None
+
+        # Step 2: Rotate so path starts AND ends with on-curve nodes.
+        # QuickLook/preview renderers expect the first node to be on-curve.
+        # Find first on-curve and rotate it to position 0.
+        first_oncurve = None
+        for i, p in enumerate(parsed):
+            if p[2] != GSOFFCURVE:
+                first_oncurve = i
+                break
+
+        if first_oncurve is not None and first_oncurve > 0:
+            parsed = parsed[first_oncurve:] + parsed[:first_oncurve]
+
+        # Step 3: Build path with correctly ordered nodes
+        path = GSPath()
+        for x, y, node_type, is_smooth in parsed:
+            node = GSNode((x, y), node_type)
+            if is_smooth and node_type != GSOFFCURVE:
+                node.smooth = True
+            path.nodes.append(node)
 
         path.closed = True
         return path
